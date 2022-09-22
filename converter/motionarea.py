@@ -17,16 +17,22 @@ log = logging.getLogger(__name__)
 
 code_import = """from pmac_motorhome.sequences import {names}
 """
-
+code_argument = """input_name = sys.argv[1]
+print(input_name)
+"""
+code_brick = """
+brick = "{brick}"
+if brick in input_name: 
+"""
 # The timeout variable isn't on a newline so if it is default it can be excluded
 # without lengthening plc arguments lines. Else it can be subbed for a string
 # with a newline and indent at the beginning
 code_plc = """
-with plc(
-    plc_num={plc.plc},
-    controller={plc.bricktype},
-    filepath="{plc.filename}",{timeout}
-):"""
+    with plc(
+        plc_num={plc.plc},
+        controller={plc.bricktype},
+        filepath="{plc.filename}",{timeout}
+    ):"""
 
 
 class MotionArea:
@@ -92,12 +98,22 @@ class MotionArea:
             with master.open("r") as stream:
                 master_text = stream.read()
             includes = self.home_plc_include.findall(master_text)
-            # log.debug("includes: ")
-            # log.debug(includes)
             master_dir = master.parent.relative_to(root)
+            # log.info("master_Dir: ")
+            # log.info(master_dir)
             relative_includes += [master_dir / Path(path) for path in includes]
 
         return relative_includes
+    
+    def _find_conroller_folders(self, root: Path) -> List[Path]:
+        masters = root.glob("**/Master*pmc")
+        #(lambda arg=x : arg.parent.relative_to(root) for x in masters)
+        all_controller_folders = set()
+        for master in masters:
+            master_dir = master.parent.relative_to(root)
+            all_controller_folders.add(master_dir)
+            
+        return list(all_controller_folders)
 
     def _execute_script(
         self,
@@ -118,7 +134,7 @@ class MotionArea:
             params (str): a space separated arguments list
         """
         os.chdir(str(cwd))
-
+        log.debug(f"script cwd set to: {cwd}")
         python = sys.executable  # defaults python 3
         if python2:
             # python = "/dls_sw/prod/tools/RHEL7-x86_64/defaults/bin/dls-python"
@@ -226,9 +242,8 @@ class MotionArea:
 
             # use the motorhoming 2.0 definition code created above to generate PLCs
             # no need for a loop - could be run only once with the same result
-            # for plc_file in plc_files:
-            plc_file = plc_files[0]
-            self._execute_script(new_root_gen, self.new_motion, Path(), str(plc_file))
+            for controller_folder in self._find_conroller_folders(self.new_motion):
+                self._execute_script(new_root_gen, self.new_motion, Path(), str(controller_folder))
         else:
             # individual per brick generators
             generators = self.new_motion.glob("*/configure/generate_homing_plcs.py")
@@ -387,6 +402,7 @@ class MotionArea:
         with outpath.open("w") as stream:
             # add shebang
             self.write_shebang(stream)
+            stream.write("import sys\n")
             stream.write(
                 "from pmac_motorhome.commands import ControllerType, "
                 "comment, group, motor, plc, PostHomeMove\n"
@@ -400,15 +416,20 @@ class MotionArea:
 
             imps = ", ".join(sorted(imports))
             stream.write(code_import.format(names=imps))
+            
+            stream.write(code_argument.format())
+            
 
             for plc in plcs:
+                brick_name = plc.filename.split("/")[0]
+                stream.write(code_brick.format(brick=brick_name))
                 timeoutstr = ""
                 if plc.timeout != 600000:
-                    timeoutstr = "\n    timeout={timeout},".format(timeout=plc.timeout)
+                    timeoutstr = "\n        timeout={timeout},".format(timeout=plc.timeout)
                 fs = code_plc.format(plc=plc, timeout=timeoutstr)
                 stream.write(fs)
                 if plc.timeout != 600000:
-                    stream.write("\n    plc.timeout={t}".format(t=plc.timeout))
+                    stream.write("\n        plc.timeout={t}".format(t=plc.timeout))
 
                 # the original created PLCs in PLC numeric order
                 for group_num in sorted(plc.groups.keys()):
@@ -416,29 +437,29 @@ class MotionArea:
 
                     post_code, extra_args, post_type = self.handle_post(group)
                     if group.pre:
-                        pre = re.sub("\t", "    ", str(group.pre))
-                        stream.write(f'\n    pre{group_num} = """{pre} """\n')
+                        pre = re.sub("\t", "        ", str(group.pre))
+                        stream.write(f'\n        pre{group_num} = """{pre} """\n')
                         extra_args += f", pre=pre{group_num}"
                     if post_code:
-                        post = re.sub("\t", "    ", str(post_code))
-                        stream.write(f'\n    post{group_num} = """{post} """\n')
+                        post = re.sub("\t", "        ", str(post_code))
+                        stream.write(f'\n        post{group_num} = """{post} """\n')
                         extra_args += f", post=post{group_num}"
 
                     stream.write(
-                        f"\n    with group(group_num={group.group_num}{extra_args}):\n"
+                        f"\n        with group(group_num={group.group_num}{extra_args}):\n"
                     )
 
                     for motor in group.motors:
                         fs = (
-                            f"        motor(axis={motor.axis}, "
+                            f"            motor(axis={motor.axis}, "
                             f"jdist={motor.jdist}, index={motor.index})\n"
                         )
                         stream.write(fs)
 
                     stream.write(
-                        f'        comment("{group.sequence.old_name}", "{post_type}")\n'
+                        f'            comment("{group.sequence.old_name}", "{post_type}")\n'
                     )
-                    stream.write(f"        {group.sequence.name}()\n")
+                    stream.write(f"            {group.sequence.name}()\n")
 
             stream.write("\n# End of auto converted homing definitions\n")
 
