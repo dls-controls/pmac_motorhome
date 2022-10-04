@@ -25,6 +25,7 @@ class Plc:
     def __init__(
         self,
         plc_num: int,
+        controller_path: str,
         controller: ControllerType,
         filepath: Path,
         timeout: int,
@@ -35,6 +36,9 @@ class Plc:
             plc_num (int): The PLC number to use in generated code
             controller (ControllerType):  target controller type for the code
             filepath (pathlib.Path): ouput file to receive the generated code
+            controller_path (string): controller path passed - argument of
+            the generating script. Specifies the controller for which we want to write
+            the plcs out.
 
         Raises:
             ValueError: Invalid output file name
@@ -42,6 +46,7 @@ class Plc:
         """
         self.filepath = filepath
         self.plc_num = plc_num
+        self.controller_path = controller_path
         self.controller: ControllerType = controller
         self.timeout: int = timeout
         self.post = post
@@ -81,9 +86,10 @@ class Plc:
         Motor.instances = {}
 
         # write out PLC
-        plc_text = self.generator.render("plc.pmc.jinja", plc=self)
-        with self.filepath.open("w") as stream:
-            stream.write(plc_text)
+        if (self.filepath.parts)[0] in self.controller_path:
+            plc_text = self.generator.render("plc.pmc.jinja", plc=self)
+            with self.filepath.open("w") as stream:
+                stream.write(plc_text)
 
     @classmethod
     def instance(cls) -> "Plc":

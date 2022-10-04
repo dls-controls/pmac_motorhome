@@ -280,8 +280,8 @@ class MotionArea:
                 os.close(fifo)
 
                 # use the motorhoming 2.0 definition code created above to generate PLCs
-                for plc_file in plc_files:
-                    self._execute_script(new_gen, brick_folder, Path(), str(plc_file))
+                #for plc_file in plc_files:
+                self._execute_script(new_gen, brick_folder, Path(), str(brick_folder))
 
     def check_matches(self):
         count = 0
@@ -406,58 +406,54 @@ class MotionArea:
                 text = indent.format_text("print(input_name)")
                 stream.write(text)
                 for plc in plcs:
-                    brick_name = plc.filename.split("/")[0]
-                    text = indent.format_text(f"brick = \"{brick_name}\"")
-                    stream.write(text)
-                    text = indent.format_text("if brick in input_name:")
-                    stream.write(text)
+                    text = indent.format_text("with plc(")
                     with indent:
-                        text = indent.format_text("with plc(")
-                        with indent:
-                            stream.write(text)
-                            text = indent.format_text(f"plc_num={plc.plc},")
-                            stream.write(text)
-                            text = indent.format_text(f"controller={plc.bricktype},")
-                            stream.write(text)
-                            text = indent.format_text(f"filepath=\"{plc.filename}\",")
-                            stream.write(text)
-                            if plc.timeout != 600000:
-                                text = indent.format_text(f"timeout={plc.timeout}")
-                                stream.write(text)
-                        text = indent.format_text("):")
                         stream.write(text)
-                        # the original created PLCs in PLC numeric order
-                        with indent:
-                            for group_num in sorted(plc.groups.keys()):
-                                group = plc.groups[group_num]
-                                post_code, extra_args, post_type = self.handle_post(group)
-                                if group.pre:
-                                    # replace tab with space
-                                    pre = re.sub("\t", "        ", str(group.pre)) 
-                                    text = indent.format_text(f'pre{group_num} = """{pre} """')
-                                    stream.write(text)
-                                    extra_args += f", pre=pre{group_num}"
-                                if post_code:
-                                    post = re.sub("\t", "        ", str(post_code))
-                                    text = indent.format_text(f'post{group_num} = """{post} """')
-                                    stream.write(text)
-                                    extra_args += f", post=post{group_num}"                           
-                                text = indent.format_text(f"with group(group_num={group.group_num}{extra_args}):")
+                        text = indent.format_text(f"plc_num={plc.plc},")
+                        stream.write(text)
+                        text = indent.format_text("controller_path=sys.argv[1],")
+                        stream.write(text)
+                        text = indent.format_text(f"controller={plc.bricktype},")
+                        stream.write(text)
+                        text = indent.format_text(f"filepath=\"{plc.filename}\",")
+                        stream.write(text)
+                        if plc.timeout != 600000:
+                            text = indent.format_text(f"timeout={plc.timeout}")
+                            stream.write(text)
+                    text = indent.format_text("):")
+                    stream.write(text)
+                    # the original created PLCs in PLC numeric order
+                    with indent:
+                        for group_num in sorted(plc.groups.keys()):
+                            group = plc.groups[group_num]
+                            post_code, extra_args, post_type = self.handle_post(group)
+                            if group.pre:
+                                # replace tab with space
+                                pre = re.sub("\t", "        ", str(group.pre)) 
+                                text = indent.format_text(f'pre{group_num} = """{pre} """')
                                 stream.write(text)
-                                with indent:
-                                    for motor in group.motors:
-                                        text = indent.format_text(
-                                            f"motor(axis={motor.axis},"
-                                            f" jdist={motor.jdist},"
-                                            f" index={motor.index})")
-                                        stream.write(text)
+                                extra_args += f", pre=pre{group_num}"
+                            if post_code:
+                                post = re.sub("\t", "        ", str(post_code))
+                                text = indent.format_text(f'post{group_num} = """{post} """')
+                                stream.write(text)
+                                extra_args += f", post=post{group_num}"                           
+                            text = indent.format_text(f"with group(group_num={group.group_num}{extra_args}):")
+                            stream.write(text)
+                            with indent:
+                                for motor in group.motors:
                                     text = indent.format_text(
-                                        f"comment(\"{group.sequence.old_name}\","
-                                        f" \"{post_type}\")"
-                                    )
+                                        f"motor(axis={motor.axis},"
+                                        f" jdist={motor.jdist},"
+                                        f" index={motor.index})")
                                     stream.write(text)
-                                    text = indent.format_text(f"{group.sequence.name}()")
-                                    stream.write(text)
+                                text = indent.format_text(
+                                    f"comment(\"{group.sequence.old_name}\","
+                                    f" \"{post_type}\")"
+                                )
+                                stream.write(text)
+                                text = indent.format_text(f"{group.sequence.name}()")
+                                stream.write(text)
                 text = indent.format_text("# End of auto converted homing definitions")
                 stream.write(text)
 

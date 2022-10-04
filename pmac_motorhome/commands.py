@@ -20,7 +20,7 @@ from .snippets import (
 )
 
 
-def plc(plc_num, controller, filepath, timeout=600000, post=None):
+def plc(plc_num, controller_path, controller, filepath, timeout=600000, post=None):
     """
     Define a new PLC. Use this to create a new Plc context using the 'with'
     keyword.
@@ -29,6 +29,9 @@ def plc(plc_num, controller, filepath, timeout=600000, post=None):
 
     Args:
         plc_num (int): Number of the generated homing PLC
+        controller_path (string): controller path passed - argument of
+            the generating script.
+            Specifies the controller for which we want to write the plcs out.
         controller (ControllerType): Determines the class of controller Pmac or
             Geobrick
         filepath (pathlib.Path): The output file where the PLC will be written
@@ -39,7 +42,7 @@ def plc(plc_num, controller, filepath, timeout=600000, post=None):
         Plc: the Plc object for use in the context
     """
 
-    return Plc(plc_num, ControllerType(controller), Path(filepath), timeout, post)
+    return Plc(plc_num, controller_path, ControllerType(controller), Path(filepath), timeout, post)
 
 
 def group(
